@@ -1,0 +1,390 @@
+{% comment %}
+  Featured Products (Recommendations) — Vanilla JS
+  - Uses Product Recommendations API via routes.product_recommendations_url
+  - Falls back to products selected in section blocks if no recommendations
+  - Slider auto-enables if > 4 products
+  - Square images, sale badge with % off, 1-line description clamp
+{% endcomment %}
+
+{{ 'ts-featured-products.css' | asset_url | stylesheet_tag }}
+
+<section id="fp-{{ section.id }}" class="fp fp--{{ section.id }}" data-section-id="{{ section.id }}">
+  <div class="fp__inner">
+    <div class="fp__text_wrapper">
+      {% if section.settings.heading != blank %}
+        <h2 class="fp__heading">{{ section.settings.heading | escape }}</h2>
+      {% endif %}
+
+      {% if section.settings.subheading != blank %}
+        <p class="fp__subheading">{{ section.settings.subheading | escape }}</p>
+      {% endif %}
+    </div>
+
+    {%- assign limit = section.settings.limit | default: 8 -%}
+
+    {%- comment -%} Visible mount point {%- endcomment -%}
+    {%- if product and product.id -%}
+      <div
+        id="fp-container-{{ section.id }}"
+        class="fp__container"
+        data-url="{{ routes.product_recommendations_url }}?section_id={{ section.id }}&product_id={{ product.id }}&limit={{ limit }}{% if request.preview_theme_id %}&preview_theme_id={{ request.preview_theme_id }}{% endif %}{% if section.settings.intent %}&intent={{ section.settings.intent }}{% endif %}"
+        aria-live="polite"
+      >
+        <div class="fp__cards" id="fp-cards-{{ section.id }}" data-count="0">
+          <div class="fp__empty">Loading recommendations…</div>
+        </div>
+      </div>
+    {%- else -%}
+      <!-- If added outside product template, render fallback immediately -->
+      <div class="fp__container">
+        <div class="fp__cards" id="fp-cards-{{ section.id }}" data-count="0">
+          {%- assign added = 0 -%}
+          {%- if section.blocks.size > 0 -%}
+            {%- for block in section.blocks -%}
+              {%- if block.type == 'product' and block.settings.product != blank -%}
+                {%- assign p = block.settings.product -%}
+                {%- assign price = p.price_min -%}
+                {%- assign compare = p.compare_at_price_max -%}
+                {%- if compare > price -%}
+                  {%- assign pct = compare | minus: price | times: 100.0 | divided_by: compare | round -%}
+                {%- endif -%}
+                <article class="fp__card">
+                  <a class="fp__link" href="{{ p.url }}" aria-label="{{ p.title | escape }}">
+                    <div class="fp__media">
+                      {%- assign save = compare | minus: price -%}
+                      {%- if compare > price and save > 0 -%}
+                        <span class="fp__badge fp__badge--save">Save {{ save | money }}</span>
+                      {%- endif -%}
+
+                      {%- if p.featured_image -%}
+                        <img
+                          class="fp__img"
+                          src="{{ p.featured_image | image_url: width: 600, height: 600, crop: 'center' }}"
+                          alt="{{ p.featured_image.alt | default: p.title | escape }}"
+                          width="600"
+                          height="600"
+                          loading="lazy"
+                        >
+                      {%- else -%}
+                        <div class="fp__img" role="img" aria-label="{{ p.title | escape }}"></div>
+                      {%- endif -%}
+                    </div>
+
+                    {%- assign rating_val = p.metafields.reviews.rating.value | default: 4.9 -%}
+                    {%- if rating_val != blank -%}
+                      <div class="fp__rating" aria-label="Rating {{ rating_val | round: 1 }} out of 5">
+                        <span class="fp__stars" aria-hidden="true">★★★★★</span>
+                        <span class="fp__rating-val">{{ rating_val | round: 1 }}</span>
+                      </div>
+                    {%- endif -%}
+
+                    <h3 class="fp__title">{{ p.title | escape }}</h3>
+
+                    {%- if p.description != blank -%}
+                      <p class="fp__desc">{{ p.description | strip_html }}</p>
+                    {%- endif -%}
+                  </a>
+
+                  <div class="fp__push" aria-hidden="true"></div>
+
+                  <div class="fp__price">
+                    {%- if compare > price -%}
+                      <span class="fp__price-compare">{{ compare | money }}</span>
+                    {%- endif -%}
+                    <span class="fp__price-current">{{ price | money }}</span>
+                  </div>
+                </article>
+
+                {%- assign added = added | plus: 1 -%}
+                {%- if added >= limit -%}{% break %}{%- endif -%}
+              {%- endif -%}
+            {%- endfor -%}
+          {%- endif -%}
+          {%- if added == 0 -%}
+            <div class="fp__empty">No products to show.</div>
+          {%- endif -%}
+        </div>
+      </div>
+    {%- endif -%}
+
+    <div class="fp__nav" hidden>
+      <button class="fp__btn fp__btn--prev" type="button" aria-label="Previous products" disabled>‹</button>
+      <button class="fp__btn fp__btn--next" type="button" aria-label="Next products">›</button>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const root = document.getElementById('fp-{{ section.id }}');
+      if (!root) return;
+
+      const isCoarse = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+      if (isCoarse) root.classList.add('is-touch');
+
+      const container = root.querySelector('#fp-container-{{ section.id }}');
+      const nav = root.querySelector('.fp__nav');
+      const prevBtn = root.querySelector('.fp__btn--prev');
+      const nextBtn = root.querySelector('.fp__btn--next');
+
+      function setupSlider(cardsEl) {
+        const items = cardsEl.querySelectorAll('.fp__card');
+        const count = items.length;
+        cardsEl.setAttribute('data-count', String(count));
+        const shouldSlide = count > 4;
+        if (!shouldSlide) {
+          nav.hidden = true;
+          return;
+        }
+        cardsEl.setAttribute('data-slider', 'true');
+
+        if (!cardsEl.querySelector('.fp__viewport')) {
+          const viewport = document.createElement('div');
+          viewport.className = 'fp__viewport';
+          const track = document.createElement('div');
+          track.className = 'fp__track';
+          Array.from(items).forEach((card) => track.appendChild(card));
+          viewport.appendChild(track);
+          cardsEl.appendChild(viewport);
+        }
+
+        const viewport = cardsEl.querySelector('.fp__viewport');
+        const track = cardsEl.querySelector('.fp__track');
+
+        nav.hidden = false;
+
+        function updateArrows() {
+          const maxScroll = viewport.scrollWidth - viewport.clientWidth;
+          prevBtn.disabled = viewport.scrollLeft <= 0;
+          nextBtn.disabled = viewport.scrollLeft >= maxScroll - 1;
+        }
+        function stepSize() {
+          return viewport.clientWidth;
+        }
+
+        prevBtn.onclick = () => viewport.scrollBy({ left: -stepSize(), behavior: 'smooth' });
+        nextBtn.onclick = () => viewport.scrollBy({ left: stepSize(), behavior: 'smooth' });
+        viewport.addEventListener('scroll', updateArrows, { passive: true });
+        window.addEventListener('resize', updateArrows);
+        queueMicrotask(updateArrows);
+      }
+
+      function hydrateCardsFromHTML(htmlText) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(htmlText, 'text/html');
+
+        // Prefer our exact ID; fall back to first .fp__cards; finally doc.body
+        const incoming =
+          doc.getElementById('fp-cards-src-{{ section.id }}') ||
+          doc.querySelector('[data-fp-source="true"]') ||
+          doc.querySelector('.fp__cards') ||
+          doc.body;
+
+        const current = document.getElementById('fp-cards-{{ section.id }}');
+
+        if (!incoming || !current) {
+          console.warn('[FP] Could not locate incoming/current cards container.', {
+            incomingFound: !!incoming,
+            currentFound: !!current,
+            html: htmlText.slice(0, 400) + '…',
+          });
+          if (current) current.innerHTML = '<div class="fp__empty">No recommendations.</div>';
+          return;
+        }
+
+        current.innerHTML = incoming.innerHTML;
+
+        // No items? Show graceful empty + stop slider
+        if (!current.querySelector('.fp__card')) {
+          current.innerHTML = '<div class="fp__empty">No recommendations.</div>';
+          return;
+        }
+
+        // Re-init slider on new content
+        (function setup() {
+          const nav = document.querySelector('#fp-{{ section.id }} .fp__nav');
+          if (nav) nav.hidden = false; // will be toggled inside setupSlider if <= 4
+        })();
+
+        // re-use your existing function
+        setupSlider(current);
+      }
+
+      if (container && container.dataset.url) {
+        fetch(container.dataset.url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+          .then((r) => r.text())
+          .then(hydrateCardsFromHTML)
+          .catch(() => {
+            const cards = root.querySelector('#fp-cards-{{ section.id }}');
+            if (cards && !cards.children.length) {
+              cards.innerHTML = '<div class="fp__empty">Couldn’t load recommendations.</div>';
+            }
+          });
+      } else {
+        const cards = root.querySelector('#fp-cards-{{ section.id }}');
+        if (cards) setupSlider(cards);
+      }
+    })();
+  </script>
+
+  {%- comment -%}
+    Hidden server-render target for the recommendations request.
+    IMPORTANT: We only output the CARD ITEMS here (no wrapper), because
+    JS copies innerHTML into the visible .fp__cards container.
+  {%- endcomment -%}
+  <div style="display:none">
+    <div id="fp-cards-src-{{ section.id }}" data-fp-source="true">
+      {% if recommendations.products_count > 0 %}
+        {%- for p in recommendations.products -%}
+          {%- assign price = p.price_min -%}
+          {%- assign compare = p.compare_at_price_max -%}
+          {%- if compare > price -%}
+            {%- assign pct = compare | minus: price | times: 100.0 | divided_by: compare | round -%}
+          {%- endif -%}
+          <article class="fp__card">
+            <a class="fp__link" href="{{ p.url }}" aria-label="{{ p.title | escape }}">
+              <div class="fp__media">
+                {%- assign save = compare | minus: price -%}
+                {%- if compare > price and save > 0 -%}
+                  <span class="fp__badge fp__badge--save">Save {{ save | money }}</span>
+                {%- endif -%}
+
+                {%- if p.featured_image -%}
+                  <img
+                    class="fp__img"
+                    src="{{ p.featured_image | image_url: width: 600, height: 600, crop: 'center' }}"
+                    alt="{{ p.featured_image.alt | default: p.title | escape }}"
+                    width="600"
+                    height="600"
+                    loading="lazy"
+                  >
+                {%- else -%}
+                  <div class="fp__img" role="img" aria-label="{{ p.title | escape }}"></div>
+                {%- endif -%}
+              </div>
+
+              {%- assign rating_val = p.metafields.reviews.rating.value | default: 4.9 -%}
+              {%- if rating_val != blank -%}
+                <div class="fp__rating" aria-label="Rating {{ rating_val | round: 1 }} out of 5">
+                  <span class="fp__stars" aria-hidden="true">★★★★★</span>
+                  <span class="fp__rating-val">{{ rating_val | round: 1 }}</span>
+                </div>
+              {%- endif -%}
+
+              <h3 class="fp__title">{{ p.title | escape }}</h3>
+
+              {%- if p.description != blank -%}
+                <p class="fp__desc">{{ p.description | strip_html }}</p>
+              {%- endif -%}
+            </a>
+
+            <div class="fp__push" aria-hidden="true"></div>
+
+            <div class="fp__price">
+              {%- if compare > price -%}
+                <span class="fp__price-compare">{{ compare | money }}</span>
+              {%- endif -%}
+              <span class="fp__price-current">{{ price | money }}</span>
+            </div>
+          </article>
+        {%- endfor -%}
+      {% else %}
+        {%- assign added = 0 -%}
+        {%- for block in section.blocks -%}
+          {%- if block.type == 'product' and block.settings.product != blank -%}
+            {%- assign sel = block.settings.product -%}
+            {%- assign p = sel -%}
+            {%- if sel and sel.id == null -%}
+              {%- assign p = all_products[sel] -%}
+            {%- endif -%}
+            {%- assign price = p.price_min -%}
+            {%- assign compare = p.compare_at_price_max -%}
+            {%- if compare > price -%}
+              {%- assign pct = compare | minus: price | times: 100.0 | divided_by: compare | round -%}
+            {%- endif -%}
+            <article class="fp__card">
+              <a class="fp__link" href="{{ p.url }}" aria-label="{{ p.title | escape }}">
+                <div class="fp__media">
+                  {%- assign save = compare | minus: price -%}
+                  {%- if compare > price and save > 0 -%}
+                    <span class="fp__badge fp__badge--save">Save {{ save | money }}</span>
+                  {%- endif -%}
+
+                  {%- if p.featured_image -%}
+                    <img
+                      class="fp__img"
+                      src="{{ p.featured_image | image_url: width: 600, height: 600, crop: 'center' }}"
+                      alt="{{ p.featured_image.alt | default: p.title | escape }}"
+                      width="600"
+                      height="600"
+                      loading="lazy"
+                    >
+                  {%- else -%}
+                    <div class="fp__img" role="img" aria-label="{{ p.title | escape }}"></div>
+                  {%- endif -%}
+                </div>
+
+                {%- assign rating_val = p.metafields.reviews.rating.value | default: 4.9 -%}
+                {%- if rating_val != blank -%}
+                  <div class="fp__rating" aria-label="Rating {{ rating_val | round: 1 }} out of 5">
+                    <span class="fp__stars" aria-hidden="true">★★★★★</span>
+                    <span class="fp__rating-val">{{ rating_val | round: 1 }}</span>
+                  </div>
+                {%- endif -%}
+
+                <h3 class="fp__title">{{ p.title | escape }}</h3>
+
+                {% assign desc = p.description
+                  | strip_html
+                  | default: 'This PREMIUM snowboard is so SUPERDUPER awesome!'
+                  | truncate: 100
+                %}
+                <p class="fp__desc">{{ desc }}</p>
+              </a>
+
+              <div class="fp__push" aria-hidden="true"></div>
+
+              <div class="fp__price">
+                {%- if compare > price -%}
+                  <span class="fp__price-compare">{{ compare | money }}</span>
+                {%- endif -%}
+                <span class="fp__price-current">{{ price | money }}</span>
+              </div>
+            </article>
+            {%- assign added = added | plus: 1 -%}
+            {%- if added >= limit -%}{% break %}{%- endif -%}
+          {%- endif -%}
+        {%- endfor -%}
+        {%- if added == 0 -%}
+          <div class="fp__empty">No products to show.</div>
+        {%- endif -%}
+      {% endif %}
+    </div>
+  </div>
+</section>
+
+{% schema %}
+{
+  "name": "TS Featured products",
+  "tag": "section",
+  "class": "fp-section",
+  "settings": [
+    { "type": "text", "id": "heading", "label": "Heading", "default": "Featured products" },
+    {
+      "type": "textarea",
+      "id": "subheading",
+      "label": "Description",
+      "default": "This is the featured products section"
+    },
+    { "type": "range", "id": "limit", "label": "Max products to show", "min": 2, "max": 12, "step": 1, "default": 8 }
+  ],
+  "blocks": [
+    {
+      "type": "product",
+      "name": "Fallback product",
+      "limit": 12,
+      "settings": [{ "type": "product", "id": "product", "label": "Product" }]
+    }
+  ],
+  "presets": [{ "name": "TS Featured products" }]
+}
+{% endschema %}
