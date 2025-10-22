@@ -109,7 +109,26 @@
       </div>
     {%- endif -%}
 
-    <div class="fp__nav" hidden>
+    {%- comment -%}
+      Show arrows immediately only when we're in the fallback (non-product) render
+      AND there are at least 5 items. On product pages we can't know yet (API),
+      so keep hidden and let JS unhide if count > 4.
+    {%- endcomment -%}
+    {%- assign show_nav = false -%}
+    {%- if product and product.id -%}
+      {%- assign show_nav = false -%}
+    {%- else -%}
+      {%- if added and added >= 5 -%}
+        {%- assign show_nav = true -%}
+      {%- endif -%}
+    {%- endif -%}
+
+    <div
+      class="fp__nav"
+      {% unless show_nav %}
+        hidden
+      {% endunless %}
+    >
       <button class="fp__btn fp__btn--prev" type="button" aria-label="Previous products" disabled>‹</button>
       <button class="fp__btn fp__btn--next" type="button" aria-label="Next products">›</button>
     </div>
