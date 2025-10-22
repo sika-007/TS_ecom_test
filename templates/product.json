@@ -128,16 +128,22 @@
             "product": "the-inventory-not-tracked-snowboard"
           }
         },
-        "product_jaG8Y6": {
+        "product_VnLkqr": {
+          "type": "product",
+          "settings": {
+            "product": "the-complete-snowboard"
+          }
+        },
+        "product_bnfAzD": {
+          "type": "product",
+          "settings": {
+            "product": "the-inventory-not-tracked-snowboard"
+          }
+        },
+        "product_eRhkGk": {
           "type": "product",
           "settings": {
             "product": "the-videographer-snowboard"
-          }
-        },
-        "product_KmN46d": {
-          "type": "product",
-          "settings": {
-            "product": "the-compare-at-price-snowboard"
           }
         }
       },
@@ -146,8 +152,9 @@
         "product_9bneiC",
         "product_pQP6dh",
         "product_TWEbWj",
-        "product_jaG8Y6",
-        "product_KmN46d"
+        "product_VnLkqr",
+        "product_bnfAzD",
+        "product_eRhkGk"
       ],
       "name": "TS Featured products",
       "settings": {
