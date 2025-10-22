@@ -127,27 +127,13 @@
           "settings": {
             "product": "the-inventory-not-tracked-snowboard"
           }
-        },
-        "product_jaG8Y6": {
-          "type": "product",
-          "settings": {
-            "product": "the-videographer-snowboard"
-          }
-        },
-        "product_KmN46d": {
-          "type": "product",
-          "settings": {
-            "product": "the-compare-at-price-snowboard"
-          }
         }
       },
       "block_order": [
         "product_4zypgT",
         "product_9bneiC",
         "product_pQP6dh",
-        "product_TWEbWj",
-        "product_jaG8Y6",
-        "product_KmN46d"
+        "product_TWEbWj"
       ],
       "name": "TS Featured products",
       "settings": {
