@@ -104,24 +104,6 @@
     "ts_featured_products_TqEbNG": {
       "type": "ts-featured-products",
       "blocks": {
-        "product_4zypgT": {
-          "type": "product",
-          "settings": {
-            "product": "the-complete-snowboard"
-          }
-        },
-        "product_9bneiC": {
-          "type": "product",
-          "settings": {
-            "product": "the-multi-managed-snowboard"
-          }
-        },
-        "product_pQP6dh": {
-          "type": "product",
-          "settings": {
-            "product": "the-collection-snowboard-oxygen"
-          }
-        },
         "product_TWEbWj": {
           "type": "product",
           "settings": {
@@ -130,9 +112,6 @@
         }
       },
       "block_order": [
-        "product_4zypgT",
-        "product_9bneiC",
-        "product_pQP6dh",
         "product_TWEbWj"
       ],
       "name": "TS Featured products",
