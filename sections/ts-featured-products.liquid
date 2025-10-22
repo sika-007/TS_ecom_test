@@ -120,6 +120,9 @@
       const root = document.getElementById('fp-{{ section.id }}');
       if (!root) return;
 
+      const SEC = '{{ section.id }}';
+
+      // Touch hint (kept)
       const isCoarse = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
       if (isCoarse) root.classList.add('is-touch');
 
@@ -128,11 +131,80 @@
       const prevBtn = root.querySelector('.fp__btn--prev');
       const nextBtn = root.querySelector('.fp__btn--next');
 
+      // -------- helpers (logging + slider) --------
+
+      function summarizeProducts(containerEl) {
+        if (!containerEl) return [];
+        const cards = containerEl.querySelectorAll('.fp__card');
+        return Array.from(cards).map((card, idx) => {
+          const a = card.querySelector('a.fp__link');
+          const hrefAttr = a?.getAttribute('href') || '';
+          const handleMatch = hrefAttr.match(/\/products\/([^\/\?#]+)/);
+          return {
+            idx,
+            id: card.getAttribute('data-product-id') || null,
+            origin: card.getAttribute('data-origin') || null, // "recommendation" | "fallback" | null
+            handle: handleMatch ? handleMatch[1] : '',
+            title: card.querySelector('.fp__title')?.textContent.trim() || '',
+            url: hrefAttr,
+            price: card.querySelector('.fp__price-current')?.textContent.trim() || '',
+            compare_at: card.querySelector('.fp__price-compare')?.textContent.trim() || null,
+            rating: card.querySelector('.fp__rating-val')?.textContent.trim() || null,
+          };
+        });
+      }
+
+      function logSourceHeader(srcType, recCount, productsLength) {
+        // srcType: "recommendations" | "fallback" | undefined
+        if (srcType === 'recommendations') {
+          console.info(`[FP][${SEC}] SOURCE: Product Recommendations API → ${recCount ?? productsLength} items`);
+        } else if (srcType === 'fallback') {
+          console.info(`[FP][${SEC}] SOURCE: FALLBACK products (no recommendations returned by API)`);
+        } else {
+          console.info(`[FP][${SEC}] SOURCE: unknown (tip: add data-source on #fp-cards-src-{{ section.id }})`);
+        }
+      }
+
+      function logProductsTable(label, products) {
+        console.groupCollapsed(`[FP][${SEC}] ${label} (${products.length})`);
+        try {
+          console.table(products);
+        } catch {
+          console.log(products);
+        }
+        console.groupEnd();
+
+        // quick duplicate signal by product id/handle
+        const ids = products.map((p) => p.id).filter(Boolean);
+        const handles = products.map((p) => p.handle).filter(Boolean);
+        const dup = (arr) => {
+          const seen = new Set(),
+            d = new Set();
+          arr.forEach((x) => (seen.has(x) ? d.add(x) : seen.add(x)));
+          return Array.from(d);
+        };
+        const dupIds = dup(ids);
+        const dupHandles = dup(handles);
+        if (dupIds.length || dupHandles.length) {
+          console.warn(`[FP][${SEC}] Duplicates detected`, { dupIds, dupHandles });
+        }
+      }
+
+      function logInsertedBreakdown(liveEl) {
+        const total = liveEl.querySelectorAll('.fp__card').length;
+        const recs = liveEl.querySelectorAll('.fp__card[data-origin="recommendation"]').length;
+        const falls = liveEl.querySelectorAll('.fp__card[data-origin="fallback"]').length;
+        console.info(`[FP][${SEC}] Inserted into DOM → total=${total} (recommendations=${recs}, fallback=${falls})`);
+      }
+
       function setupSlider(cardsEl) {
         const items = cardsEl.querySelectorAll('.fp__card');
         const count = items.length;
         cardsEl.setAttribute('data-count', String(count));
         const shouldSlide = count > 4;
+
+        console.info(`[FP][${SEC}] setupSlider: items=${count} → slider ${shouldSlide ? 'ENABLED' : 'disabled'}`);
+
         if (!shouldSlide) {
           nav.hidden = true;
           return;
@@ -150,7 +222,6 @@
         }
 
         const viewport = cardsEl.querySelector('.fp__viewport');
-        const track = cardsEl.querySelector('.fp__track');
 
         nav.hidden = false;
 
@@ -170,11 +241,13 @@
         queueMicrotask(updateArrows);
       }
 
+      // -------- hydrate (logs sources) --------
+
       function hydrateCardsFromHTML(htmlText) {
+        console.time(`[FP][${SEC}] hydrate`);
         const parser = new DOMParser();
         const doc = parser.parseFromString(htmlText, 'text/html');
 
-        // Prefer our exact ID; fall back to first .fp__cards; finally doc.body
         const incoming =
           doc.getElementById('fp-cards-src-{{ section.id }}') ||
           doc.querySelector('[data-fp-source="true"]') ||
@@ -190,16 +263,32 @@
             html: htmlText.slice(0, 400) + '…',
           });
           if (current) current.innerHTML = '<div class="fp__empty">No recommendations.</div>';
+          console.timeEnd(`[FP][${SEC}] hydrate`);
           return;
         }
 
+        // Read server-side metadata and log exact source + items
+        const srcMeta = doc.getElementById('fp-cards-src-{{ section.id }}');
+        const srcType = srcMeta?.dataset?.source; // 'recommendations' | 'fallback'
+        const recCount = srcMeta?.dataset?.recommendedCount;
+        const serverProducts = summarizeProducts(incoming);
+
+        logSourceHeader(srcType, recCount, serverProducts.length);
+        logProductsTable('Server products', serverProducts);
+
+        // Swap into live DOM
         current.innerHTML = incoming.innerHTML;
 
-        // No items? Show graceful empty + stop slider
+        // Empty state guard
         if (!current.querySelector('.fp__card')) {
           current.innerHTML = '<div class="fp__empty">No recommendations.</div>';
+          console.info(`[FP][${SEC}] No .fp__card elements found → showing empty state.`);
+          console.timeEnd(`[FP][${SEC}] hydrate`);
           return;
         }
+
+        // Post-insert breakdown
+        logInsertedBreakdown(current);
 
         // Re-init slider on new content
         (function setup() {
@@ -207,15 +296,24 @@
           if (nav) nav.hidden = false; // will be toggled inside setupSlider if <= 4
         })();
 
-        // re-use your existing function
         setupSlider(current);
+        console.timeEnd(`[FP][${SEC}] hydrate`);
       }
 
+      // -------- fetch / prerender paths --------
+
       if (container && container.dataset.url) {
+        console.info(`[FP][${SEC}] Fetching recommendations: ${container.dataset.url}`);
+        console.time(`[FP][${SEC}] fetch`);
         fetch(container.dataset.url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
           .then((r) => r.text())
-          .then(hydrateCardsFromHTML)
-          .catch(() => {
+          .then((html) => {
+            console.timeEnd(`[FP][${SEC}] fetch`);
+            hydrateCardsFromHTML(html);
+          })
+          .catch((err) => {
+            console.timeEnd(`[FP][${SEC}] fetch`);
+            console.error(`[FP][${SEC}] Fetch failed:`, err);
             const cards = root.querySelector('#fp-cards-{{ section.id }}');
             if (cards && !cards.children.length) {
               cards.innerHTML = '<div class="fp__empty">Couldn’t load recommendations.</div>';
@@ -223,7 +321,15 @@
           });
       } else {
         const cards = root.querySelector('#fp-cards-{{ section.id }}');
-        if (cards) setupSlider(cards);
+        console.info(`[FP][${SEC}] No API URL; using pre-rendered/fallback cards.`);
+        if (cards) {
+          // Log what’s already in DOM (pre-render / fallback case)
+          const preProducts = summarizeProducts(cards);
+          logSourceHeader('fallback', undefined, preProducts.length); // safe assumption when no API call
+          logProductsTable('Pre-rendered products', preProducts);
+          logInsertedBreakdown(cards);
+          setupSlider(cards);
+        }
       }
     })();
   </script>
