@@ -31,7 +31,7 @@
         aria-live="polite"
       >
         <div class="fp__cards" id="fp-cards-{{ section.id }}" data-count="0">
-          <div class="fp__empty">Loading recommendations…</div>
+          <div class="fp__empty">Loading your recommendations…</div>
         </div>
       </div>
     {%- else -%}
@@ -43,6 +43,8 @@
             {%- for block in section.blocks -%}
               {%- if block.type == 'product' and block.settings.product != blank -%}
                 {%- assign p = block.settings.product -%}
+                {%- comment %} Skip if this is the same product as the current page {%- endcomment %}
+                {%- if product and product.id and p and p.id and product.id == p.id -%}{% continue %}{%- endif -%}
                 {%- assign price = p.price_min -%}
                 {%- assign compare = p.compare_at_price_max -%}
                 {%- if compare > price -%}
@@ -232,7 +234,12 @@
     JS copies innerHTML into the visible .fp__cards container.
   {%- endcomment -%}
   <div style="display:none">
-    <div id="fp-cards-src-{{ section.id }}" data-fp-source="true">
+    <div
+      id="fp-cards-src-{{ section.id }}"
+      data-fp-source="true"
+      data-source="{% if recommendations.products_count > 0 %}recommendations{% else %}fallback{% endif %}"
+      data-recommended-count="{{ recommendations.products_count | default: 0 }}"
+    >
       {% if recommendations.products_count > 0 %}
         {%- for p in recommendations.products -%}
           {%- assign price = p.price_min -%}
@@ -240,7 +247,7 @@
           {%- if compare > price -%}
             {%- assign pct = compare | minus: price | times: 100.0 | divided_by: compare | round -%}
           {%- endif -%}
-          <article class="fp__card">
+          <article class="fp__card" data-origin="recommendation" data-product-id="{{ p.id }}">
             <a class="fp__link" href="{{ p.url }}" aria-label="{{ p.title | escape }}">
               <div class="fp__media">
                 {%- assign save = compare | minus: price -%}
@@ -296,12 +303,14 @@
             {%- if sel and sel.id == null -%}
               {%- assign p = all_products[sel] -%}
             {%- endif -%}
+            {%- comment %} Skip if this is the same product as the current page {%- endcomment %}
+            {%- if product and product.id and p and p.id and product.id == p.id -%}{% continue %}{%- endif -%}
             {%- assign price = p.price_min -%}
             {%- assign compare = p.compare_at_price_max -%}
             {%- if compare > price -%}
               {%- assign pct = compare | minus: price | times: 100.0 | divided_by: compare | round -%}
             {%- endif -%}
-            <article class="fp__card">
+            <article data-origin="fallback" data-product-id="{{ p.id }}" class="fp__card">
               <a class="fp__link" href="{{ p.url }}" aria-label="{{ p.title | escape }}">
                 <div class="fp__media">
                   {%- assign save = compare | minus: price -%}
@@ -333,11 +342,7 @@
 
                 <h3 class="fp__title">{{ p.title | escape }}</h3>
 
-                {% assign desc = p.description
-                  | strip_html
-                  | default: 'This PREMIUM snowboard is so SUPERDUPER awesome!'
-                  | truncate: 100
-                %}
+                {% assign desc = p.description | strip_html | default: 'Product Description' | truncate: 100 %}
                 <p class="fp__desc">{{ desc }}</p>
               </a>
 

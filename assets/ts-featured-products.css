@@ -1,12 +1,12 @@
 /* how much of the next card to show on phones */
 :root {
-  --fp-peek: 56px;
+  --fp-peek: 135px;
 }
 
 /* phones only: add side padding and shrink card width a bit */
 @media (max-width: 767.98px) {
   .fp__cards[data-slider="true"] .fp__viewport {
-    padding-left: 16px; /* aligns with your text padding */
+    padding-left: 8px; /* aligns with your text padding */
     padding-right: var(--fp-peek); /* space to reveal next card */
     scroll-padding-left: 16px; /* snap to the padded edge */
     scroll-padding-right: var(--fp-peek);
@@ -245,10 +245,13 @@
 .fp__rating-val {
   font-size: 12px;
   color: #222;
+  display: flex;
+  align-items: center;
 }
 @media (min-width: 768px) {
   .fp__rating-val {
     font-size: 14px;
+    height: 39.6px;
   }
 }
 
