@@ -137,6 +137,8 @@
   margin-top: 12px;
 }
 
+.fp [hidden] { display: none !important; }
+
 @media (max-width: 1024px) {
   .fp__nav {
     margin-right: 16px;
